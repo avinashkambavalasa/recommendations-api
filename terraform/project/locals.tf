@@ -28,4 +28,6 @@ locals {
     ? module.dynamodb_table[local.resolved_table_key].table_arn
     : ""
   )
+  # Guard flags — used to conditionally create shared infrastructure
+  create_rds    = length(var.sql_db) > 0
 }
