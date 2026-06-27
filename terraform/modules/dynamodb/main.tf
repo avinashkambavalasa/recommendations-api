@@ -8,7 +8,7 @@ resource "aws_dynamodb_table" "this" {
   deletion_protection_enabled = var.deletion_protection
   table_class                 = var.table_class
 
-  # Partition key attribute
+  # partition key
   attribute {
     name = var.hash_key
     type = var.hash_key_type
@@ -23,7 +23,7 @@ resource "aws_dynamodb_table" "this" {
     }
   }
 
-  # Extra attributes required by GSIs / LSIs
+  # attributes used by indexes
   dynamic "attribute" {
     for_each = var.additional_attributes
     content {
@@ -63,7 +63,7 @@ resource "aws_dynamodb_table" "this" {
     }
   }
 
-  # only set a CMK if one is passed in. leaving this block out still gives SSE with the aws-owned key, and avoids the perpetual diff from the api returning an actual arn when the config says null
+  # only set cmk when caller passes one, otherwise aws owned sse is enough
   dynamic "server_side_encryption" {
     for_each = var.kms_key_arn != null ? [1] : []
     content {
