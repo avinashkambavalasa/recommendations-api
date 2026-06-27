@@ -28,6 +28,11 @@ variable "config_secret_arn" {
   type = string
 }
 
+variable "dead_letter_queue_arn" {
+  description = "SQS queue ARN where Lambda can send failed async events"
+  type        = string
+}
+
 variable "db_resource_ids" {
   description = "RDS DbiResourceId values to scope the rds-db:connect permission. leave empty if no RDS is provisioned"
   type        = list(string)

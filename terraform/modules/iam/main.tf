@@ -15,8 +15,7 @@ data "aws_iam_policy_document" "lambda_assume" {
       identifiers = ["lambda.amazonaws.com"]
     }
 
-    # Confused-deputy protection: only Lambda functions in this specific account
-    # can assume this role — prevents cross-account privilege escalation.
+    # keep this role assumable only from our account
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
@@ -80,9 +79,14 @@ data "aws_iam_policy_document" "lambda" {
     resources = [var.config_secret_arn]
   }
 
-  # RDS IAM database authentication: Lambda generates a short-lived token
-  # (15 min TTL) via rds-db:connect instead of using a stored password.
-  # Only included when RDS instances are provisioned (db_resource_ids non-empty).
+  statement {
+    sid       = "WriteDeadLetterQueue"
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [var.dead_letter_queue_arn]
+  }
+
+  # only used if we add rds later with iam auth
   dynamic "statement" {
     for_each = length(var.db_resource_ids) > 0 ? [1] : []
     content {
@@ -91,7 +95,7 @@ data "aws_iam_policy_document" "lambda" {
       actions = ["rds-db:connect"]
       resources = [
         for rid in var.db_resource_ids :
-        "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${rid}/${var.db_app_username}"
+        "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${rid}/${var.db_app_username}"
       ]
     }
   }

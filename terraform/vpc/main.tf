@@ -41,6 +41,14 @@ resource "aws_vpc" "this" {
   })
 }
 
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.this.id
+
+  tags = merge(local.default_tags, {
+    Name = "${local.name_prefix}-default-sg-restricted"
+  })
+}
+
 resource "aws_internet_gateway" "this" {
   vpc_id = aws_vpc.this.id
 
@@ -49,7 +57,7 @@ resource "aws_internet_gateway" "this" {
   })
 }
 
-# capture all vpc traffic for security auditing - CIS 3.9
+# turn this on in prod for network audit logs
 resource "aws_cloudwatch_log_group" "flow_logs" {
   count             = var.enable_flow_logs ? 1 : 0
   name              = "/aws/vpc/${local.name_prefix}-flow-logs"
@@ -154,15 +162,14 @@ resource "aws_subnet" "database" {
   })
 }
 
-# NACLs are stateless so we need both directions per flow.
-# ephemeral ports 1024-65535 are needed for TCP return traffic
+# nacls are stateless, so return traffic needs its own rules
 
-# public subnets: https in from internet, ephemeral return ports out
+# public subnet network rules
 resource "aws_network_acl" "public" {
   vpc_id     = aws_vpc.this.id
   subnet_ids = [for s in aws_subnet.public : s.id]
 
-  # inbound https from internet
+  # inbound https
   ingress {
     rule_no    = 100
     protocol   = "tcp"
@@ -171,7 +178,7 @@ resource "aws_network_acl" "public" {
     from_port  = 443
     to_port    = 443
   }
-  # inbound ephemeral return ports from nat gateway responses
+  # return traffic
   ingress {
     rule_no    = 200
     protocol   = "tcp"
@@ -180,7 +187,7 @@ resource "aws_network_acl" "public" {
     from_port  = 1024
     to_port    = 65535
   }
-  # outbound https to internet via nat
+  # outbound https
   egress {
     rule_no    = 100
     protocol   = "tcp"
@@ -189,7 +196,7 @@ resource "aws_network_acl" "public" {
     from_port  = 443
     to_port    = 443
   }
-  # outbound ephemeral ports back to internet clients
+  # return traffic back out
   egress {
     rule_no    = 200
     protocol   = "tcp"
@@ -202,12 +209,12 @@ resource "aws_network_acl" "public" {
   tags = merge(local.default_tags, { Name = "${local.name_prefix}-public-nacl" })
 }
 
-# private subnets: only accept traffic from within the VPC, outbound via NAT
+# private subnet network rules
 resource "aws_network_acl" "private" {
   vpc_id     = aws_vpc.this.id
   subnet_ids = [for s in aws_subnet.private : s.id]
 
-  # inbound from within the VPC (lambda, load balancers etc)
+  # inbound from inside the vpc
   ingress {
     rule_no    = 100
     protocol   = "tcp"
@@ -216,7 +223,7 @@ resource "aws_network_acl" "private" {
     from_port  = 0
     to_port    = 65535
   }
-  # inbound ephemeral return from internet via nat
+  # return traffic from nat
   ingress {
     rule_no    = 200
     protocol   = "tcp"
@@ -225,7 +232,7 @@ resource "aws_network_acl" "private" {
     from_port  = 1024
     to_port    = 65535
   }
-  # outbound https for aws api calls through nat
+  # aws api calls through nat
   egress {
     rule_no    = 100
     protocol   = "tcp"
@@ -234,7 +241,7 @@ resource "aws_network_acl" "private" {
     from_port  = 443
     to_port    = 443
   }
-  # outbound postgres to db subnets
+  # postgres to db subnets
   egress {
     rule_no    = 200
     protocol   = "tcp"
@@ -243,7 +250,7 @@ resource "aws_network_acl" "private" {
     from_port  = 5432
     to_port    = 5432
   }
-  # outbound ephemeral return within the VPC
+  # return traffic inside the vpc
   egress {
     rule_no    = 300
     protocol   = "tcp"
@@ -256,12 +263,12 @@ resource "aws_network_acl" "private" {
   tags = merge(local.default_tags, { Name = "${local.name_prefix}-private-nacl" })
 }
 
-# db subnets: only postgres from private subnets, nothing else in or out
+# database subnet network rules
 resource "aws_network_acl" "database" {
   vpc_id     = aws_vpc.this.id
   subnet_ids = [for s in aws_subnet.database : s.id]
 
-  # inbound postgres from private subnets only
+  # postgres from private subnets
   ingress {
     rule_no    = 100
     protocol   = "tcp"
@@ -270,7 +277,7 @@ resource "aws_network_acl" "database" {
     from_port  = 5432
     to_port    = 5432
   }
-  # outbound ephemeral return to private subnets
+  # return traffic to private subnets
   egress {
     rule_no    = 100
     protocol   = "tcp"
@@ -358,7 +365,7 @@ resource "aws_route_table" "database" {
 
   vpc_id = aws_vpc.this.id
 
-  # db subnets are completely isolated, no internet route
+  # no internet route for db subnets
   tags = merge(local.default_tags, {
     Name = "${local.name_prefix}-database-rt-${each.value.az}"
     Tier = "database"

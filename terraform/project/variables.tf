@@ -21,70 +21,22 @@ variable "vpc_id" {
 }
 
 variable "private_subnet_ids" {
-  description = "private subnet ids"
+  description = "private subnet ids for the lambda vpc attachment"
   type        = list(string)
   default     = []
 }
 
 variable "public_subnet_ids" {
-  description = "public subnet ids"
+  description = "public subnet ids, not used right now but good to have in state"
   type        = list(string)
   default     = []
 }
 
-variable "db_subnet_ids" {
-  description = "db subnet ids for the RDS subnet group. need at least 2 if sql_db is set"
-  type        = list(string)
-  default     = []
-}
 
 variable "dynamo_db" {
   description = "two-level map of dynamodb tables to create. leave empty to skip. format: { namespace = { table-key = { schema } } }"
   type        = any
   default     = {}
-}
-
-variable "ext_rds_sg_cidr_block" {
-  description = "cidrs that can hit the db port directly, eg vpn or bastion range. set to [] to disable"
-  type        = list(string)
-  default     = ["10.0.0.0/8"]
-}
-
-variable "sql_db" {
-  description = <<-EOT
-    Map of PostgreSQL RDS instances to create. Leave empty ({}) to skip.
-    key is used in the instance identifier: <cluster>-<key>-rds. needs vpc_id and db_subnet_ids when non-empty.
-  EOT
-  type = map(object({
-    databases                  = optional(list(string), [])
-    port                       = optional(number, 5432)
-    admin_user                 = optional(string, "postgresadmin")
-    node_type                  = optional(string, "db.t4g.small")
-    disk_size                  = optional(number, 20)
-    max_disk_size              = optional(number, null)
-    multi_az                   = optional(bool, false)
-    deletion_protection        = optional(bool, true)
-    apply_changes_immediately  = optional(bool, false)
-    engine_version             = optional(string, "16.9")
-    backup_retention_days      = optional(number, 7)
-    storage_type               = optional(string, "gp3")
-    storage_throughput         = optional(number, null)
-    iops                       = optional(number, 0)
-    monitoring_interval        = optional(number, 0)
-    auto_minor_version_upgrade = optional(bool, true)
-    auto_major_version_upgrade = optional(bool, false)
-    read_replica               = optional(bool, false)
-    read_replica_multi_az      = optional(bool, false)
-    log_min_duration_statement = optional(number, -1)
-    pg_force_ssl               = optional(number, 1)
-  }))
-  default = {}
-}
-
-variable "db_app_username" {
-  description = "postgres username lambda connects as. this user needs the rds_iam role in postgres"
-  type        = string
-  default     = "app"
 }
 
 variable "dynamodb_app_table_key" {
@@ -93,8 +45,173 @@ variable "dynamodb_app_table_key" {
   default     = ""
 }
 
+
+variable "lambda_artifact_bucket" {
+  description = "s3 bucket where the lambda zip lives"
+  type        = string
+}
+
+variable "lambda_artifact_key" {
+  description = "s3 key for the lambda zip. pin to a specific version on every deploy"
+  type        = string
+}
+
+variable "service_timezone" {
+  description = "timezone passed to the lambda as an env var"
+  type        = string
+  default     = "UTC"
+}
+
+variable "enable_logging" {
+  description = "create cloudwatch log groups, s3 audit bucket and firehose pipeline"
+  type        = bool
+  default     = true
+}
+
+variable "enable_monitoring" {
+  description = "create cloudwatch alarms"
+  type        = bool
+  default     = true
+}
+
+variable "enable_flow_logs" {
+  description = "reserved flag for VPC flow logs when this app owns networking"
+  type        = bool
+  default     = false
+}
+
+variable "log_retention_days" {
+  description = "how long to keep cloudwatch logs"
+  type        = number
+  default     = 365
+}
+
+variable "audit_object_lock_days" {
+  description = "object lock retention for audit logs in s3. prevents deletion"
+  type        = number
+  default     = 90
+}
+
+variable "lambda_memory_size" {
+  description = "lambda memory in MB"
+  type        = number
+  default     = 256
+}
+
+variable "lambda_timeout_seconds" {
+  description = "lambda timeout in seconds"
+  type        = number
+  default     = 10
+}
+
+variable "config_secret_name" {
+  description = "base name for the secrets manager secret that holds app config"
+  type        = string
+  default     = "app/config"
+}
+
 variable "common_tags" {
   description = "extra tags to merge into all resources"
   type        = map(string)
   default     = {}
+}
+
+variable "cors_allowed_origins" {
+  description = "allowed CORS origins. dont put wildcard here in prod"
+  type        = list(string)
+}
+
+variable "reserved_concurrency" {
+  description = "reserved concurrency for lambda. -1 means unreserved. setting this caps scaling and limits blast radius if traffic spikes"
+  type        = number
+  default     = -1
+}
+
+variable "enable_waf" {
+  description = "attach a WAF WebACL to the api gateway stage"
+  type        = bool
+  default     = true
+}
+
+
+variable "waf_rate_limit" {
+  description = "max requests per IP in a 5-min window before WAF blocks it"
+  type        = number
+  default     = 1000
+}
+
+variable "enable_bot_control" {
+  description = "enable bot control managed rule group. adds per-request WAF charges so keep off in dev"
+  type        = bool
+  default     = false
+}
+
+variable "alarm_email" {
+  description = "optional email address for cloudwatch alarm notifications"
+  type        = string
+  default     = ""
+}
+
+variable "canary_weight" {
+  description = "percent of traffic to route to latest lambda version for canary. 0 disables canary routing"
+  type        = number
+  default     = 0
+}
+
+variable "initial_restaurants" {
+  description = "seed restaurants managed by terraform"
+  type = list(object({
+    restaurant_id = string
+    name          = string
+    style         = string
+    address       = string
+    open_hour     = string
+    close_hour    = string
+    vegetarian    = bool
+    deliveries    = bool
+  }))
+  default = [
+    {
+      restaurant_id = "bella-roma"
+      name          = "Bella Roma"
+      style         = "Italian"
+      address       = "99 Wherever Street, Somewhere"
+      open_hour     = "09:00"
+      close_hour    = "23:00"
+      vegetarian    = true
+      deliveries    = true
+    },
+    {
+      restaurant_id = "seoul-garden"
+      name          = "Seoul Garden"
+      style         = "Korean"
+      address       = "12 Market Lane, Somewhere"
+      open_hour     = "11:00"
+      close_hour    = "22:00"
+      vegetarian    = true
+      deliveries    = false
+    },
+    {
+      restaurant_id = "late-bistro"
+      name          = "Late Bistro"
+      style         = "French"
+      address       = "5 Station Road, Somewhere"
+      open_hour     = "18:00"
+      close_hour    = "02:00"
+      vegetarian    = false
+      deliveries    = true
+    }
+  ]
+}
+
+variable "domain_name" {
+  description = "base domain name eg example.com. full hostname will be <app>.<env>.<domain>. leave empty to use the default api gateway url"
+  type        = string
+  default     = ""
+}
+
+variable "zone_id" {
+  description = "route53 hosted zone id. leave empty and it will look up the zone by domain_name"
+  type        = string
+  default     = ""
 }
