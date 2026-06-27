@@ -19,7 +19,7 @@ variable "logs_kms_key_arn" {
 variable "retention_days" {
   description = "how long to keep logs in s3 before expiry"
   type        = number
-  default     = 90
+  default     = 365
 }
 
 variable "object_lock_days" {

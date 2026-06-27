@@ -106,7 +106,7 @@ resource "aws_s3_bucket_policy" "audit" {
   policy = data.aws_iam_policy_document.audit_bucket.json
 }
 
-# Move to cheaper storage after initial retention period; immutable after write.
+# move older logs to cheaper storage
 resource "aws_s3_bucket_lifecycle_configuration" "audit" {
   bucket = aws_s3_bucket.audit.id
 
@@ -126,13 +126,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "audit" {
       storage_class = "GLACIER_IR"
     }
 
-    # Hard delete after object lock retention expires + safety buffer.
+    # delete after retention plus a small buffer
     expiration {
       days = var.object_lock_days + 30
     }
 
     noncurrent_version_expiration {
       noncurrent_days = 7
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 }
@@ -222,6 +226,12 @@ resource "aws_kinesis_firehose_delivery_stream" "audit" {
   name        = "${local.name_prefix}-audit-stream"
   destination = "extended_s3"
 
+  server_side_encryption {
+    enabled  = true
+    key_type = "CUSTOMER_MANAGED_CMK"
+    key_arn  = var.audit_kms_key_arn
+  }
+
   extended_s3_configuration {
     role_arn            = aws_iam_role.firehose.arn
     bucket_arn          = aws_s3_bucket.audit.arn
@@ -248,7 +258,7 @@ data "aws_iam_policy_document" "cloudwatch_assume" {
 
     principals {
       type        = "Service"
-      identifiers = ["logs.${data.aws_region.current.region}.amazonaws.com"]
+      identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
     }
 
     actions = ["sts:AssumeRole"]
