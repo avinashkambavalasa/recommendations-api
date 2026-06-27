@@ -1,0 +1,25 @@
+# CODEOWNERS
+# Rules are evaluated bottom-up; the LAST matching rule wins.
+# Replace placeholder teams with your real GitHub teams.
+
+# Default ownership
+*                                           @org/engineering
+
+# API for developers
+/api/app/                                   @org/developers
+/api/pyproject.toml                         @org/developers
+/api/requirements*.txt                      @org/developers
+/web                                        @org/developers
+
+# Tests for QA (and developers for code-impact awareness)
+/api/tests/                                 @org/qa @org/developers
+
+# Terraform for DevOps / Infra
+/terraform/                                 @org/devops @org/platform-team
+
+# Terragrunt for DevOps / Infra
+/terragrunt/                                @org/devops @org/platform-team
+
+# GitHub workflows and pipeline templates for DevOps
+/.github/workflows/                         @org/devops @org/platform-team
+/github-actions-templates/                  @org/devops @org/platform-team

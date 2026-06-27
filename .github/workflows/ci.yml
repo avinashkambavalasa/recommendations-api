@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.10"
+  TF_VERSION: "1.4.5"
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./github-actions-templates/python/scans
+        with:
+          python_version: ${{ env.PYTHON_VERSION }}
+          working_directory: api
+          run_security: "true"
+
+  terraform:
+    name: Terraform checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./github-actions-templates/Terraform/iac-quality
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          working_directory: terraform
+          validate_directory: terraform/project
+          run_security: "true"
+
+  package:
+    name: Package Lambda
+    runs-on: ubuntu-latest
+    needs: [python, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        if: vars.ARTIFACT_BUCKET != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
+          role-session-name: recommendation-api-ci-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: ./github-actions-templates/python/lambda
+        with:
+          app_name: recommendation-api
+          working_directory: api
+          artifact_bucket: ${{ vars.ARTIFACT_BUCKET }}
+          artifact_prefix: recommendation-api
+          sign_artifact: "true"
+          artifact_retention_days: "7"

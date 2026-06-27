@@ -1,0 +1,66 @@
+name: Drift check
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.4.5"
+  TG_VERSION: "0.67.16"
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ACCOUNT: "aws-account-name"
+  ENVIRONMENT: "prod"
+  STACK: "recommendation-api"
+
+jobs:
+  plan:
+    name: Terragrunt plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: recommendation-api-drift-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install Terragrunt
+        run: |
+          curl -sSL "https://github.com/gruntwork-io/terragrunt/releases/download/v${TG_VERSION}/terragrunt_linux_amd64" -o terragrunt
+          chmod +x terragrunt
+          sudo mv terragrunt /usr/local/bin/terragrunt
+
+      - name: Check drift
+        id: drift
+        continue-on-error: true
+        run: |
+          TG_DIR="terragrunt/aws/${ACCOUNT}/${ENVIRONMENT}/${STACK}"
+          cd "$TG_DIR"
+          terragrunt init -input=false -no-color
+          set +e
+          terragrunt plan -input=false -no-color -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Fail on drift or plan error
+        if: steps.drift.outputs.exit_code != '0'
+        run: |
+          if [ "${{ steps.drift.outputs.exit_code }}" = "2" ]; then
+            echo "Drift detected. Please review the Terragrunt plan."
+          else
+            echo "Terragrunt plan failed."
+          fi
+          exit 1

@@ -1,0 +1,46 @@
+name: terraform-checks
+description: Terraform formatting, validation and security checks
+
+inputs:
+  terraform_version:
+    description: Terraform version to use
+    default: "1.4.5"
+  working_directory:
+    description: directory used for terraform fmt
+    default: "terraform"
+  validate_directory:
+    description: deployable Terraform root to init and validate
+    default: "terraform/project"
+  run_security:
+    description: Run Checkov security scan
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - name: Terraform fmt
+      shell: bash
+      run: terraform fmt -check -recursive "${{ inputs.working_directory }}"
+
+    - name: Terraform init
+      shell: bash
+      working-directory: ${{ inputs.validate_directory }}
+      run: terraform init -backend=false
+
+    - name: Terraform validate
+      shell: bash
+      working-directory: ${{ inputs.validate_directory }}
+      run: terraform validate
+
+    # Checkov catches common Terraform security mistakes.
+    - name: Checkov scan
+      if: inputs.run_security == 'true'
+      uses: bridgecrewio/checkov-action@v12
+      with:
+        directory: ${{ inputs.working_directory }}
+        framework: terraform
+        quiet: true
