@@ -35,21 +35,23 @@ resource "aws_dynamodb_table" "this" {
   dynamic "global_secondary_index" {
     for_each = var.global_secondary_indexes
     content {
-      name            = global_secondary_index.value.name
-      hash_key        = global_secondary_index.value.hash_key
-      range_key       = try(global_secondary_index.value.range_key, null)
-      projection_type = try(global_secondary_index.value.projection_type, "ALL")
-      read_capacity   = var.billing_mode == "PROVISIONED" ? try(global_secondary_index.value.read_capacity, var.read_capacity) : null
-      write_capacity  = var.billing_mode == "PROVISIONED" ? try(global_secondary_index.value.write_capacity, var.write_capacity) : null
+      name               = global_secondary_index.value.name
+      hash_key           = global_secondary_index.value.hash_key
+      range_key          = try(global_secondary_index.value.range_key, null)
+      projection_type    = try(global_secondary_index.value.projection_type, "ALL")
+      non_key_attributes = try(global_secondary_index.value.projection_type, "ALL") == "INCLUDE" ? try(global_secondary_index.value.non_key_attributes, []) : null
+      read_capacity      = var.billing_mode == "PROVISIONED" ? try(global_secondary_index.value.read_capacity, var.read_capacity) : null
+      write_capacity     = var.billing_mode == "PROVISIONED" ? try(global_secondary_index.value.write_capacity, var.write_capacity) : null
     }
   }
 
   dynamic "local_secondary_index" {
     for_each = var.local_secondary_indexes
     content {
-      name            = local_secondary_index.value.name
-      range_key       = local_secondary_index.value.range_key
-      projection_type = try(local_secondary_index.value.projection_type, "ALL")
+      name               = local_secondary_index.value.name
+      range_key          = local_secondary_index.value.range_key
+      projection_type    = try(local_secondary_index.value.projection_type, "ALL")
+      non_key_attributes = try(local_secondary_index.value.projection_type, "ALL") == "INCLUDE" ? try(local_secondary_index.value.non_key_attributes, []) : null
     }
   }
 
@@ -61,9 +63,13 @@ resource "aws_dynamodb_table" "this" {
     }
   }
 
-  server_side_encryption {
-    enabled     = true
-    kms_key_arn = var.kms_key_arn
+  # only set a CMK if one is passed in. leaving this block out still gives SSE with the aws-owned key, and avoids the perpetual diff from the api returning an actual arn when the config says null
+  dynamic "server_side_encryption" {
+    for_each = var.kms_key_arn != null ? [1] : []
+    content {
+      enabled     = true
+      kms_key_arn = var.kms_key_arn
+    }
   }
 
   point_in_time_recovery {
