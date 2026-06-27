@@ -1,4 +1,4 @@
-# Flatten the two-level dynamo_db map into { "<namespace>-<table-key>" => config }
+# make the input map easier to loop over
 locals {
   dynamo_tables = merge([
     for ns, tables in var.dynamo_db :
@@ -28,4 +28,24 @@ module "dynamodb_table" {
   local_secondary_indexes  = try(each.value.local_secondary_indexes, [])
   replica_regions          = try(each.value.replica_regions, [])
   tags                     = local.default_tags
+}
+
+resource "aws_dynamodb_table_item" "restaurant_seed" {
+  for_each = {
+    for restaurant in var.initial_restaurants : restaurant.restaurant_id => restaurant
+  }
+
+  table_name = local.table_name
+  hash_key   = "restaurant_id"
+
+  item = jsonencode({
+    restaurant_id = { S = each.value.restaurant_id }
+    name          = { S = each.value.name }
+    style         = { S = each.value.style }
+    address       = { S = each.value.address }
+    open_hour     = { S = each.value.open_hour }
+    close_hour    = { S = each.value.close_hour }
+    vegetarian    = { BOOL = each.value.vegetarian }
+    deliveries    = { BOOL = each.value.deliveries }
+  })
 }

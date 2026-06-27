@@ -1,5 +1,9 @@
 locals {
   name_prefix          = "${var.app_name}-${var.app_env}"
+  lambda_function_name = "${local.name_prefix}-api"
+  config_secret_name   = var.config_secret_name != "" ? var.config_secret_name : "${local.name_prefix}/config"
+  logging_key          = var.enable_logging ? "enabled" : null
+  monitoring_key       = var.enable_monitoring ? "enabled" : null
 
   default_tags = merge(var.common_tags, {
     AppName     = var.app_name
@@ -9,9 +13,7 @@ locals {
     Stack       = "recommendation assessment"
   })
 
-  # Resolve which DynamoDB table the Lambda reads from.
-  # Priority: explicit var, if not provided, then look for first table in dynamo_db map > "" (no DynamoDB).
-  # Setting dynamodb_app_table_key is only needed when dynamo_db has multiple tables and you want a specific one — leave it "" to auto-pick the first.
+  # pick the table for lambda. set dynamodb_app_table_key only if there is more than one.
   resolved_table_key = (
     var.dynamodb_app_table_key != ""
     ? var.dynamodb_app_table_key
@@ -28,6 +30,12 @@ locals {
     ? module.dynamodb_table[local.resolved_table_key].table_arn
     : ""
   )
-  # Guard flags — used to conditionally create shared infrastructure
-  create_rds    = length(var.sql_db) > 0
+
+  selected_cors_origin = contains(var.cors_allowed_origins, "*") ? "*" : try(var.cors_allowed_origins[0], "*")
+  log_group_arn        = var.enable_logging ? module.logging["enabled"].lambda_log_group_arn : aws_cloudwatch_log_group.lambda_fallback[0].arn
+  api_access_log_group_arn = (
+    var.enable_logging
+    ? module.logging["enabled"].api_access_log_group_arn
+    : aws_cloudwatch_log_group.api_access_fallback[0].arn
+  )
 }
