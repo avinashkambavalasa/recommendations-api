@@ -18,7 +18,7 @@ data "aws_iam_policy_document" "kms_base" {
   }
 }
 
-# CloudWatch Logs needs encrypt/decrypt on this key
+# cloudwatch logs uses this key
 data "aws_iam_policy_document" "kms_logs" {
   source_policy_documents = [data.aws_iam_policy_document.kms_base.json]
 
@@ -27,7 +27,7 @@ data "aws_iam_policy_document" "kms_logs" {
     effect = "Allow"
     principals {
       type        = "Service"
-      identifiers = ["logs.${data.aws_region.current.region}.amazonaws.com"]
+      identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
     }
     actions = [
       "kms:Encrypt",
@@ -40,12 +40,31 @@ data "aws_iam_policy_document" "kms_logs" {
     condition {
       test     = "ArnLike"
       variable = "kms:EncryptionContext:aws:logs:arn"
-      values   = ["arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"]
+      values   = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"]
+    }
+  }
+
+  statement {
+    sid    = "AllowSQS"
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["sqs.amazonaws.com"]
+    }
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey"
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:CallerAccount"
+      values   = [data.aws_caller_identity.current.account_id]
     }
   }
 }
 
-# Firehose and S3 need access for audit log encryption
+# firehose and s3 use this for audit logs
 data "aws_iam_policy_document" "kms_audit" {
   source_policy_documents = [data.aws_iam_policy_document.kms_base.json]
 
