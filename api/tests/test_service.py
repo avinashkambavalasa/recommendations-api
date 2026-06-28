@@ -52,3 +52,16 @@ def test_recommends_restaurant_matching_all_criteria(service: RecommendationServ
     )
 
     assert recommendation.name == "Bella Roma"
+
+
+def test_supports_restaurants_open_after_midnight(service: RecommendationService) -> None:
+    recommendation = service.recommend(
+        RecommendationCriteria(style="Korean", open_at=time(1, 30))
+    )
+
+    assert recommendation.name == "Night Noodles"
+
+
+def test_raises_not_found_when_no_restaurant_matches(service: RecommendationService) -> None:
+    with pytest.raises(NotFoundError):
+        service.recommend(RecommendationCriteria(style="French", vegetarian=True))

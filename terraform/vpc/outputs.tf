@@ -20,7 +20,7 @@ output "database_subnet_ids" {
 
 output "flow_log_group_name" {
   description = "CloudWatch log group name for VPC Flow Logs."
-  value       = aws_cloudwatch_log_group.flow_logs.name
+  value       = var.enable_flow_logs ? aws_cloudwatch_log_group.flow_logs[0].name : null
 }
 
 output "nat_gateway_ids" {
