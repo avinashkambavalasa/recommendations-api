@@ -43,4 +43,5 @@ runs:
       with:
         directory: ${{ inputs.working_directory }}
         framework: terraform
+        config_file: .checkov.yaml
         quiet: true
