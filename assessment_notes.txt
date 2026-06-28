@@ -1,0 +1,180 @@
+Assessment notes:
+=================
+
+What I built
+------------
+
+I built a small restaurant recommendation API using AWS serverless services.
+
+The API can filter restaurants by style, vegetarian option, delivery option, and whether the restaurant is open now. It returns one matching restaurant as JSON. I also handled overnight opening hours, for example a restaurant open from 18:00 to 02:00.
+
+Main endpoint:
+
+GET /recommendations
+
+Example:
+
+GET /recommendations?style=Italian&vegetarian=true&open_now=true
+
+The code is written in Python and runs on Lambda. The infrastructure is written in Terraform, with Terragrunt used for the environment setup.
+
+I kept the Terraform modules and GitHub Actions templates in this same repository so the assignment is easy to review. In a real company setup, I would usually move shared Terraform modules and workflow templates to separate shared repositories.
+
+
+Architecture choice
+-------------------
+
+I used API Gateway, Lambda, and DynamoDB because the API is small, public, and mostly read-only.
+
+This keeps the setup simple. There are no EC2 servers to patch, no load balancer to manage, and no database instance to maintain. The system can also scale without much extra work from my side.
+
+For this assignment, I think serverless is a good fit because traffic is unknown. If nobody calls the API, the cost stays low. If traffic increases, AWS handles most of the scaling.
+
+
+Why DynamoDB
+------------
+
+I chose DynamoDB because the data model is simple. A restaurant record has fields like name, style, address, open hour, close hour, vegetarian, and deliveries.
+
+The API mostly needs to read restaurant records and filter them. There is no need for joins or complex SQL queries. Because of that, RDS would add more maintenance and cost without giving much value.
+
+DynamoDB also fits well with Lambda. It is managed, highly available, and can use pay-per-request billing. I added point-in-time recovery and encryption, so it is safer for production use.
+
+I added a style index because style is one common search field, like Italian, Korean, or French. This helps avoid scanning the whole table when style is provided.
+
+
+API Gateway and Lambda
+----------------------
+
+API Gateway is the public entry point. It gives HTTPS, routing, access logs, CORS, throttling, and WAF integration.
+
+For TLS, the default API Gateway endpoint already gives AWS-managed HTTPS. I also added optional custom domain code, but I did not deploy it to a real domain from this machine.
+
+I also added Terraform code for the custom domain path. If domain_name is set, Terraform creates an ACM certificate, validates it with a DNS record in Route53, creates an API Gateway custom domain with TLS 1.2, maps the API default stage to that domain, and creates a Route53 alias record.
+
+If I set domain_name to example.com for prod, the endpoint would look like this:
+
+https://recommendation-api.prod.example.com/recommendations?style=Italian&open_at=12:00
+
+I also added Terraform outputs for the custom API endpoint and a sample recommendation URL, so it is easy to see what URL to test after deployment.
+
+Lambda runs the Python code. This works well because the service is stateless. Lambda only runs when a request comes in, so it is cheaper than running a server all the time.
+
+I added timeout settings in API Gateway and Lambda. In the Python code, the DynamoDB client also has short connect/read timeouts and normal AWS SDK retries. This avoids a request hanging for too long if AWS has a temporary network issue.
+
+The handler also returns clean JSON errors. Bad input returns 400, no match returns 404, and unexpected errors return a safe 500 message. The real exception is logged with the request id, but the client does not see internal error details.
+
+I also set reserved concurrency. This is not only for performance. It also protects cost. If a bad client or bot sends too many requests, Lambda cannot scale without limit.
+
+Lambda also has a dead letter queue. If an async event fails after retries, it is not just lost. We can check the queue and replay or debug it later.
+
+
+Logging and audit
+-----------------
+
+I treated request logs as sensitive data. Even if restaurant data is public, logs can still include IP address, user agent, request path, query values, and request time.
+
+The API writes logs to CloudWatch. API Gateway also writes access logs. From there, logs are sent through Firehose into an S3 audit bucket.
+
+Application logs are structured JSON. This makes it easier to search by request id, event type, restaurant id, or error type.
+
+I used S3 for audit storage because it is cheap, durable, and good for long-term logs. The bucket has public access blocked, KMS encryption, versioning, lifecycle rules, and object lock.
+
+CloudWatch is still useful for debugging, but S3 is better for keeping audit logs longer and cheaper.
+
+
+Security and permissions
+------------------------
+
+I used KMS encryption for DynamoDB, CloudWatch logs, S3 audit logs, and Secrets Manager.
+
+IAM permissions are scoped to what each service needs. The Lambda role can read from DynamoDB and write logs, but it does not get admin access. It also does not get DynamoDB write access because the API only needs to recommend restaurants.
+
+Firehose can write only to the audit bucket and use the audit KMS key. CloudWatch can send logs to Firehose.
+
+I added WAF in front of API Gateway because the API is public. The main risk here is cost and availability, not private data exposure. Rate limiting blocks bad traffic before it reaches Lambda and DynamoDB.
+
+WAF logs are also written to CloudWatch with KMS encryption. I added AWS managed rules for common web attacks and known bad inputs, and kept bot control behind a flag because it can add cost.
+
+Authentication is not included because the requirement says no authentication is required. If this became a real product with user accounts, I would add authentication, per-user rate limits, and stronger audit events.
+
+
+Cost optimization
+-----------------
+
+The design is cost friendly:
+
+Lambda runs only per request.
+DynamoDB uses on-demand billing.
+No EC2 or RDS is running all the time.
+Firehose batches logs before writing to S3.
+S3 lifecycle moves old logs to cheaper storage.
+CloudWatch log retention is configured.
+WAF blocks bad traffic before it creates Lambda and DynamoDB cost.
+
+I avoided NAT gateways, ECS, and RDS because they would make this assignment more expensive and more complex than needed.
+
+
+Testing and validation
+----------------------
+
+I added tests for the recommendation logic, open hours, bad input, safe 500 errors, and handler response.
+
+Validations we can run:
+
+python3 -m pytest
+python3 -m bandit -r api/app -x api/tests -ll
+python3 -m pip_audit -r api/requirements.txt --no-deps
+terraform fmt -recursive terraform
+terraform -chdir=terraform/project validate
+terragrunt hcl format --check
+checkov -d terraform --config-file .checkov.yaml
+actionlint .github/workflows/*.yml
+gitleaks detect --source . --redact
+
+
+CI/CD
+-----
+
+I added a small GitHub Actions setup, but kept it simple because this is a take-home assignment.
+
+The CI workflow runs Python tests, Python security scans, secret scanning, and Terraform checks. On main branch it also builds a Lambda zip and stores it as a GitHub Actions artifact. If an artifact bucket is configured, the same action can also upload the zip to S3 for deployment.
+
+For security scanning, I kept the list small but useful:
+
+Bandit checks the Python code for common security mistakes.
+pip-audit checks Python dependencies for known CVEs.
+Gitleaks checks that secrets were not committed by mistake.
+Checkov checks the Terraform for common cloud security and permission issues.
+
+This is not a full enterprise security gate, but I felt it is enough to show that security is part of the normal pipeline and not only something checked at the end.
+
+I added cosign keyless signing for the Lambda zip. This gives a small supply chain control without making the pipeline too large. The zip gets a signature bundle, and if the artifact is uploaded to S3, the bundle is uploaded next to it.
+
+The deploy workflow is manual. It uses GitHub OIDC to assume an AWS role and verifies the Lambda artifact signature when an S3 artifact is configured.
+
+I split deploy into two jobs: plan and apply. The plan job creates a saved Terragrunt plan and uploads it as a short-lived artifact. The apply job has the GitHub Environment approval gate, so approval happens after the plan is created and before apply runs. I also do not use auto approve. The apply job applies the saved plan file, so the change being applied is the same one that was reviewed.
+
+There is also a small drift detection workflow. It runs a scheduled Terragrunt plan and fails if Terraform sees changes outside the state.
+
+I did not add things like SBOM generation or a big reusable platform pipeline. Those are useful in a real company setup, but for this assignment they would look too heavy. I wanted the pipeline to show good habits without overbuilding it.
+
+
+Things I kept simple
+--------------------
+
+I did not deploy it to a live AWS account from this machine.
+
+I did not build an admin API for creating restaurants. For this assessment, restaurant seed data is managed by Terraform.
+
+I added a basic web folder structure only. I did not build the web app code because the main requirement was the public API and Terraform setup.
+
+I kept the response format simple and close to the assignment example.
+
+If the dataset grows, I would review the real access patterns and add more DynamoDB indexes only where needed.
+
+
+Final note
+----------
+
+My goal was to keep the system simple, secure, and easy to operate. I chose managed AWS services because they fit this kind of small public API well and keep both cost and maintenance low.
