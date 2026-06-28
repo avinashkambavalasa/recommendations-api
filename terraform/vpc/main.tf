@@ -223,7 +223,7 @@ resource "aws_network_acl" "private" {
     from_port  = 0
     to_port    = 65535
   }
-  # return traffic from nat
+  # return traffic if private subnets later get outbound internet
   ingress {
     rule_no    = 200
     protocol   = "tcp"
@@ -232,7 +232,7 @@ resource "aws_network_acl" "private" {
     from_port  = 1024
     to_port    = 65535
   }
-  # aws api calls through nat
+  # outbound https if private subnets later get internet access
   egress {
     rule_no    = 100
     protocol   = "tcp"

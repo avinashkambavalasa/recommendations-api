@@ -22,7 +22,7 @@ module "dynamodb_table" {
   ttl_enabled              = try(each.value.ttl_enabled, false)
   ttl_attribute_name       = try(each.value.ttl_attribute_name, "ttl")
   deletion_protection      = try(each.value.deletion_protection, true)
-  kms_key_arn              = null
+  kms_key_arn              = module.kms.dynamodb_key_arn
   additional_attributes    = try(each.value.additional_attributes, [])
   global_secondary_indexes = try(each.value.global_secondary_indexes, [])
   local_secondary_indexes  = try(each.value.local_secondary_indexes, [])
