@@ -4,6 +4,16 @@ on:
   pull_request:
   push:
     branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      AWS_REGION:
+        description: AWS region used only when publishing Lambda artifact
+        required: false
+        default: us-east-2
+      ARTIFACT_BUCKET:
+        description: Optional S3 bucket for Lambda artifact publishing
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -17,6 +27,8 @@ concurrency:
 env:
   PYTHON_VERSION: "3.10"
   TF_VERSION: "1.4.5"
+  AWS_REGION: ${{ inputs.AWS_REGION || 'us-east-2' }}
+  ARTIFACT_BUCKET: ${{ inputs.ARTIFACT_BUCKET || '' }}
 
 jobs:
   python:
@@ -53,18 +65,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        if: vars.ARTIFACT_BUCKET != ''
+        if: env.ARTIFACT_BUCKET != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
           role-session-name: recommendation-api-ci-${{ github.run_id }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - uses: ./github-actions-templates/python/lambda
         with:
           app_name: recommendation-api
           working_directory: api
-          artifact_bucket: ${{ vars.ARTIFACT_BUCKET }}
+          artifact_bucket: ${{ env.ARTIFACT_BUCKET }}
           artifact_prefix: recommendation-api
           sign_artifact: "true"
           artifact_retention_days: "7"

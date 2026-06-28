@@ -1,7 +1,7 @@
 from typing import Any
 
 from app.config.settings import Settings
-from app.logger.logger import log_event
+from app.logger.logger import log_event, log_exception
 from app.models.errors import BadRequestError, NotFoundError
 from app.repository.restaurant_repository import DynamoDBRestaurantRepository
 from app.services.recommendation_service import (
@@ -36,9 +36,13 @@ def handle_request(
     except NotFoundError as exc:
         log_event("restaurant_recommendation_not_found", request_id=request_id)
         return response(404, {"message": str(exc)})
-    except Exception:
-        log_event("restaurant_recommendation_failed", request_id=request_id)
-        raise
+    except Exception as exc:
+        log_exception(
+            "restaurant_recommendation_failed",
+            request_id=request_id,
+            error_type=exc.__class__.__name__,
+        )
+        return response(500, {"message": "internal server error"})
 
     log_event(
         "restaurant_recommendation_served",

@@ -49,11 +49,13 @@ variable "dynamodb_app_table_key" {
 variable "lambda_artifact_bucket" {
   description = "s3 bucket where the lambda zip lives"
   type        = string
+  default     = ""
 }
 
 variable "lambda_artifact_key" {
   description = "s3 key for the lambda zip. pin to a specific version on every deploy"
   type        = string
+  default     = ""
 }
 
 variable "service_timezone" {

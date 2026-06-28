@@ -4,6 +4,23 @@ on:
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
+    inputs:
+      AWS_REGION:
+        description: AWS region
+        required: false
+        default: us-east-2
+      account_name:
+        description: AWS account folder under terragrunt/aws
+        required: false
+        default: aws-account-name
+      environment_name:
+        description: Environment folder under the account
+        required: false
+        default: prod
+      stack:
+        description: Terragrunt stack folder
+        required: false
+        default: recommendation-api
 
 permissions:
   id-token: write
@@ -12,10 +29,10 @@ permissions:
 env:
   TF_VERSION: "1.4.5"
   TG_VERSION: "0.67.16"
-  AWS_REGION: ${{ vars.AWS_REGION }}
-  ACCOUNT: "aws-account-name"
-  ENVIRONMENT: "prod"
-  STACK: "recommendation-api"
+  AWS_REGION: ${{ inputs.AWS_REGION || 'us-east-2' }}
+  ACCOUNT: ${{ inputs.account_name || 'aws-account-name' }}
+  ENVIRONMENT: ${{ inputs.environment_name || 'prod' }}
+  STACK: ${{ inputs.stack || 'recommendation-api' }}
 
 jobs:
   plan:

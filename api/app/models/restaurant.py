@@ -42,3 +42,15 @@ class Restaurant:
             return opens <= requested_time < closes
         return requested_time >= opens or requested_time < closes
 
+
+def _parse_time(value: str) -> time:
+    hour, minute = value.split(":", 1)
+    return time(int(hour), int(minute))
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+    return bool(value)

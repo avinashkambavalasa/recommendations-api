@@ -15,6 +15,22 @@ on:
         description: Terragrunt stack folder
         required: true
         default: recommendation-api
+      AWS_REGION:
+        description: AWS region
+        required: true
+        default: us-east-2
+      LAMBDA_ARTIFACT_BUCKET:
+        description: Optional S3 bucket for the signed Lambda zip
+        required: false
+        default: ""
+      LAMBDA_ARTIFACT_KEY:
+        description: Optional S3 key for the signed Lambda zip
+        required: false
+        default: ""
+      API_URL:
+        description: Optional API URL for smoke test
+        required: false
+        default: ""
 
 permissions:
   id-token: write
@@ -23,7 +39,9 @@ permissions:
 env:
   TF_VERSION: "1.4.5"
   TG_VERSION: "0.67.16"
-  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_REGION: ${{ inputs.AWS_REGION }}
+  LAMBDA_ARTIFACT_BUCKET: ${{ inputs.LAMBDA_ARTIFACT_BUCKET }}
+  LAMBDA_ARTIFACT_KEY: ${{ inputs.LAMBDA_ARTIFACT_KEY }}
   PLAN_FILE: tfplan-${{ github.run_id }}-${{ github.run_attempt }}
   PLAN_ARTIFACT: terragrunt-plan-${{ github.run_id }}-${{ github.run_attempt }}
 
@@ -63,11 +81,8 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
-          TG_DIR="terragrunt/aws/${{ inputs.account_name }}/${{ inputs.environment_name }}/${{ inputs.stack }}"
-          TG_FILE="${TG_DIR}/terragrunt.hcl"
-
-          BUCKET=$(grep 'lambda_artifact_bucket' "$TG_FILE" | grep -oP '(?<=")[^"]+(?=")' | head -1)
-          KEY=$(grep 'lambda_artifact_key' "$TG_FILE" | grep -oP '(?<=")[^"]+(?=")' | head -1)
+          BUCKET="${LAMBDA_ARTIFACT_BUCKET}"
+          KEY="${LAMBDA_ARTIFACT_KEY}"
 
           if [ -z "$BUCKET" ] || [ -z "$KEY" ]; then
             echo "No S3 Lambda artifact configured, skipping signature check"
@@ -150,7 +165,7 @@ jobs:
       # quick api check after deploy
       - name: Smoke test
         env:
-          API_URL: ${{ vars.API_URL }}
+          API_URL: ${{ inputs.API_URL }}
         run: |
           if [ -z "$API_URL" ]; then
             echo "API_URL is not set, skipping smoke test"

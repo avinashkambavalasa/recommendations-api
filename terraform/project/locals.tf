@@ -9,7 +9,7 @@ locals {
     AppName     = var.app_name
     Environment = var.app_env
     ManagedBy   = "terraform"
-    Owner       = "varonis-team"
+    Owner       = lookup(var.common_tags, "owner", "platform-team")
     Stack       = "recommendation assessment"
   })
 
@@ -31,8 +31,7 @@ locals {
     : ""
   )
 
-  selected_cors_origin = contains(var.cors_allowed_origins, "*") ? "*" : try(var.cors_allowed_origins[0], "*")
-  log_group_arn        = var.enable_logging ? module.logging["enabled"].lambda_log_group_arn : aws_cloudwatch_log_group.lambda_fallback[0].arn
+  log_group_arn = var.enable_logging ? module.logging["enabled"].lambda_log_group_arn : aws_cloudwatch_log_group.lambda_fallback[0].arn
   api_access_log_group_arn = (
     var.enable_logging
     ? module.logging["enabled"].api_access_log_group_arn

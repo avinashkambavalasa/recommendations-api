@@ -19,12 +19,12 @@ provider "aws" {
 EOF
 }
 
+# no profile in backend; local runs use AWS_PROFILE and ci uses oidc role creds
 remote_state {
   backend = "s3"
   config = {
     bucket         = local.state_bucket
     key            = "${path_relative_to_include()}/terraform.tfstate"
-    profile        = local.aws_profile
     region         = local.state_bucket_region
     encrypt        = true
     dynamodb_table = local.lock_table

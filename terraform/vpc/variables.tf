@@ -40,9 +40,9 @@ variable "database_subnet_cidrs" {
 }
 
 variable "enable_nat_gateway" {
-  description = "create NAT gateways for private subnet internet access"
+  description = "create NAT gateways for private subnet internet access. off by default to keep this assessment low cost"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "single_nat_gateway" {
